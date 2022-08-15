@@ -13,7 +13,6 @@ from nltk.corpus import stopwords
 from Stemmer import Stemmer
 
 UNSTEMMED_TOKENS = set()
-ENGLISH_STOPWORDS = set(stopwords.words("english"))
 ENGLISH_STEMMER = Stemmer("english")
 
 # Constants <<<
@@ -23,6 +22,12 @@ FIELD_TYPE_INFOBOX = "i"
 FIELD_TYPE_CATEGORIES = "c"
 FIELD_TYPE_EXTERNAL_LINKS = "l"
 FIELD_TYPE_REFERENCES = "r"
+
+REGEX_INFOBOX = re.compile(r"{{infobox.*?^}}$", flags=re.M | re.DOTALL)
+REGEX_BRACES = re.compile(r"{{.*?}}", flags=re.M)
+REGEX_CATEGORY = re.compile(r"\[\[category:(?P<cat>.*?)\]\]")
+
+ENGLISH_STOPWORDS = set(stopwords.words("english"))
 # >>>
 
 # Configuration variables <<<
@@ -56,6 +61,13 @@ def base_64_decode(chars):
 
 # >>>
 
+# Utils <<<
+def is_token_useful(token: str):
+    return (token not in ENGLISH_STOPWORDS) and (not token.isnumeric())
+
+
+# >>>
+
 # Writing Index Files <<<
 def write_pages_in_temp_index_files(field_type, index_map, file_count):
     index_filename = os.path.join(index_dir, f"index_{field_type}_{file_count}.txt")
@@ -65,6 +77,10 @@ def write_pages_in_temp_index_files(field_type, index_map, file_count):
             line = " ".join([token, " ".join(index_map[token])])
             lines.append(line + "\n")
         f.writelines(lines)
+
+
+def merge_temp_index_files(field_type):
+    pass
 
 
 # >>>
@@ -216,49 +232,50 @@ def tokenize_and_stem(text):
 
     text = text.encode("ascii", errors="ignore").decode()
 
-    for sym in {"&nbsp;", "&lt;", "&gt;", "&amp;", "&quot;", "&apos;"}:
+    for sym in {
+        "&nbsp;",
+        "&lt;",
+        "&gt;",
+        "&amp;",
+        "&quot;",
+        "&apos;",
+        "—",
+        "%",
+        "$",
+        "'",
+        "~",
+        "|",
+        ".",
+        "*",
+        "[",
+        "]",
+        ":",
+        ";",
+        ",",
+        "{",
+        "}",
+        "(",
+        ")",
+        "=",
+        "+",
+        "-",
+        "_",
+        "#",
+        "!",
+        "`",
+        '"',
+        "?",
+        "/",
+        ">",
+        "<",
+        "&",
+        "\\",
+    }:
         text = text.replace(sym, " ")
-
-    text = re.sub(r"\W+", r" ", text)
-
-    # for sym in {
-    #     "—",
-    #     "%",
-    #     "$",
-    #     "'",
-    #     "~",
-    #     "|",
-    #     ".",
-    #     "*",
-    #     "[",
-    #     "]",
-    #     ":",
-    #     ";",
-    #     ",",
-    #     "{",
-    #     "}",
-    #     "(",
-    #     ")",
-    #     "=",
-    #     "+",
-    #     "-",
-    #     "_",
-    #     "#",
-    #     "!",
-    #     "`",
-    #     '"',
-    #     "?",
-    #     "/",
-    #     ">",
-    #     "<",
-    #     "&",
-    #     "\\",
-    # }:
-    #     text = text.replace(sym, " ")
 
     text = text.split()
 
-    text = [token for token in text if token not in ENGLISH_STOPWORDS]
+    text = [token for token in text if is_token_useful(token)]
     for token in text:
         UNSTEMMED_TOKENS.add(token)
 
@@ -270,40 +287,35 @@ def tokenize_and_stem(text):
 def extract_body(text):
 
     # remove infobox
-    text = re.sub(
-        pattern=r"{{infobox.*?^}}$",
-        repl=r" ",
-        string=text,
-        flags=re.DOTALL | re.M,
-    )
+    text = REGEX_INFOBOX.sub(repl=" ", string=text)
     # remove any remaining {{}}
-    text = re.sub(
-        pattern=r"{{.*?}}",
-        repl=r" ",
-        string=text,
-        flags=re.M,
-    )
+    text = REGEX_BRACES.sub(repl=" ", string=text)
 
     return tokenize_and_stem(text)
 
 
 def extract_infobox(text):
 
-    matches = re.findall(
-        pattern="{{infobox(?P<body>.*?)^}}$",
-        string=text,
-        flags=re.DOTALL | re.M,
-    )
+    start_index = 0
+    if not text.startswith("{{infobox"):
+        start_index = 1
 
-    return tokenize_and_stem(" ".join(matches))
+    infobox = []
+
+    text = text.split("{{infobox")
+    for t in text[start_index:]:
+        lines = t.split("\n")
+        for line in lines:
+            if line == "}}":
+                break
+            infobox.append(line)
+
+    return tokenize_and_stem(" ".join(infobox))
 
 
 def extract_categories(text):
 
-    matches = re.findall(
-        pattern=r"\[\[category:(?P<cat>.*?)\]\]",
-        string=text,
-    )
+    matches = REGEX_CATEGORY.findall(string=text)
 
     return tokenize_and_stem(" ".join(matches))
 
