@@ -14,6 +14,7 @@ from nltk.corpus import stopwords
 from Stemmer import Stemmer
 
 UNSTEMMED_TOKENS = set()
+STEMMED_TOKENS = set()
 ENGLISH_STEMMER = Stemmer("english")
 
 # Constants <<<
@@ -298,6 +299,7 @@ def process_text(title: str, text: str):
 def tokenize_and_stem(text):
 
     global UNSTEMMED_TOKENS
+    global STEMMED_TOKENS
 
     text = text.encode("ascii", errors="ignore").decode()
 
@@ -357,6 +359,9 @@ def tokenize_and_stem(text):
             and (3 < len(token) < 15)
         )
     ]
+
+    for token in text:
+        STEMMED_TOKENS.add(token)
 
     return text
 
@@ -540,3 +545,9 @@ if __name__ == "__main__":
     merge_temp_index_files(FIELD_TYPE_CATEGORIES)
     merge_temp_index_files(FIELD_TYPE_EXTERNAL_LINKS)
     merge_temp_index_files(FIELD_TYPE_REFERENCES)
+
+    with open(stat_file, "w") as f:
+        f.write(
+            f"Total number of tokens encountered in dump : {len(UNSTEMMED_TOKENS):,}\n"
+        )
+        f.write(f"Total number of tokens in inverted index : {len(STEMMED_TOKENS):,}\n")

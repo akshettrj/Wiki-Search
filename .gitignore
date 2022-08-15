@@ -132,3 +132,4 @@ datasets/
 profiling.png
 index_dir/
 *.prof
+stats.txt
