@@ -1,3 +1,4 @@
+import heapq
 import os
 import re
 import shutil
@@ -32,6 +33,7 @@ ENGLISH_STOPWORDS = set(stopwords.words("english"))
 
 # Configuration variables <<<
 NUMBER_OF_PAGES_PER_PREINDEX_FILE = 15_000
+NUMBER_OF_TOKENS_PER_FILE = 50_000
 # >>>
 
 # Base Conversion <<<
@@ -49,7 +51,9 @@ def base_64_encode(num):
         chars.append(ENCODING_CHARS[rem])
         if num == 0:
             break
-    return "".join(reversed(chars))
+
+    chars = list(reversed(chars))
+    return "".join(chars)
 
 
 def base_64_decode(chars):
@@ -61,26 +65,91 @@ def base_64_decode(chars):
 
 # >>>
 
-# Utils <<<
-def is_token_useful(token: str):
-    return (token not in ENGLISH_STOPWORDS) and (not token.isnumeric())
-
-
-# >>>
-
 # Writing Index Files <<<
 def write_pages_in_temp_index_files(field_type, index_map, file_count):
-    index_filename = os.path.join(index_dir, f"index_{field_type}_{file_count}.txt")
+
+    index_filename = os.path.join(
+        index_dir, f"temp_index_{field_type}_{file_count}.txt"
+    )
     with open(index_filename, "w") as f:
         lines = []
         for token in sorted(index_map.keys()):
-            line = " ".join([token, " ".join(index_map[token])])
+            line = f"{token} {' '.join(index_map[token])}"
             lines.append(line + "\n")
         f.writelines(lines)
 
 
+def write_final_index_file(page_count, field_type, data):
+
+    file_name = os.path.join(index_dir, f"index_{field_type}_{page_count}.txt")
+
+    if not data:
+        return
+
+    with open(file_name, "a") as f:
+        f.write("\n".join(data))
+
+
 def merge_temp_index_files(field_type):
-    pass
+
+    priority_queue = []
+    fds = {}
+    top_lines = {}
+    top_line_words = {}
+    page_count = 0
+
+    top_element = ()
+    count = 1
+    current_word = ""
+    current_data = ""
+    data = []
+
+    for file_num in range(TEMP_INDEX_FILE_COUNT):
+        file_name = os.path.join(index_dir, f"temp_index_{field_type}_{file_num}.txt")
+        fds[file_num] = open(file_name, "r")
+        top_lines[file_num] = fds[file_num].readline().strip()
+        if top_lines != "":
+            top_line_words[file_num] = top_lines[file_num].split()
+            heapq.heappush(priority_queue, (top_line_words[file_num][0], file_num))
+
+    while len(priority_queue) != 0:
+        top_element = heapq.heappop(priority_queue)
+        new_file_num = top_element[1]
+
+        if count % NUMBER_OF_TOKENS_PER_FILE == 0:
+            write_final_index_file(page_count, field_type, data)
+            if data:
+                page_count += 1
+            data = []
+            count = 1
+
+        if current_word == top_element[0] or current_word == "":
+            current_word, _ = top_element
+            current_data += " "
+            current_data += " ".join(top_line_words[new_file_num][1:])
+        else:
+            data.append(current_data)
+            count += 1
+            current_word, _ = top_element
+            current_data = top_lines[new_file_num]
+
+        top_lines[new_file_num] = fds[new_file_num].readline().strip()
+        if top_lines[new_file_num] != "":
+            top_line_words[new_file_num] = top_lines[new_file_num].split()
+            heapq.heappush(
+                priority_queue, (top_line_words[new_file_num][0], new_file_num)
+            )
+        else:
+            fds[new_file_num].close()
+            top_line_words[new_file_num] = []
+            file_name = os.path.join(
+                index_dir, f"temp_index_{field_type}_{new_file_num}.txt"
+            )
+            os.remove(file_name)
+
+    data.append(current_data)
+    count += 1
+    write_final_index_file(page_count, field_type, data)
 
 
 # >>>
@@ -133,17 +202,17 @@ def create_pre_index(title, body, infobox, categories, external_links, reference
         in_references = references_counter[token]
 
         if in_title > 0:
-            INDEX_MAP_TITLE[token].append(article_id)
+            INDEX_MAP_TITLE[token].append(f"{article_id}:{in_title}")
         if in_body > 0:
-            INDEX_MAP_BODY[token].append(article_id)
+            INDEX_MAP_BODY[token].append(f"{article_id}:{in_body}")
         if in_infobox > 0:
-            INDEX_MAP_INFOBOX[token].append(article_id)
+            INDEX_MAP_INFOBOX[token].append(f"{article_id}:{in_infobox}")
         if in_categories > 0:
-            INDEX_MAP_CATEGORIES[token].append(article_id)
+            INDEX_MAP_CATEGORIES[token].append(f"{article_id}:{in_categories}")
         if in_external_links > 0:
-            INDEX_MAP_EXTERNAL_LINKS[token].append(article_id)
+            INDEX_MAP_EXTERNAL_LINKS[token].append(f"{article_id}:{in_external_links}")
         if in_references > 0:
-            INDEX_MAP_REFERENCES[token].append(article_id)
+            INDEX_MAP_REFERENCES[token].append(f"{article_id}:{in_references}")
 
     PAGE_COUNT += 1
     if PAGE_COUNT % NUMBER_OF_PAGES_PER_PREINDEX_FILE == 0:
@@ -199,8 +268,8 @@ def process_text(title: str, text: str):
     title = title.lower()
 
     # extract references
-    for sep in {"== references ==", "==references ==", "== references=="}:
-        text = text.replace(sep, "==references==")
+    for sep in {"== ", " =="}:
+        text = text.replace(sep, "==")
     data = text.split("==references==")
 
     final_title = tokenize_and_stem(title)
@@ -275,11 +344,19 @@ def tokenize_and_stem(text):
 
     text = text.split()
 
-    text = [token for token in text if is_token_useful(token)]
     for token in text:
         UNSTEMMED_TOKENS.add(token)
 
     text = list(ENGLISH_STEMMER.stemWords(text))
+    text = [
+        token
+        for token in text
+        if (
+            (token.isalpha())
+            and (token not in ENGLISH_STOPWORDS)
+            and (3 < len(token) < 15)
+        )
+    ]
 
     return text
 
@@ -322,24 +399,18 @@ def extract_categories(text):
 
 def extract_references(text):
 
-    text = text.split("\n\n")[0].replace("reflist", " ")
+    text = text.split("\n\n", maxsplit=1)[0].replace("reflist", " ")
 
     return tokenize_and_stem(text)
 
 
 def extract_external_links(text):
 
-    for sep in {
-        "== external links ==",
-        "==external links ==",
-        "== external links==",
-    }:
-        text = text.replace(sep, "==external links==")
     text = text.split("==external links==")
     if len(text) == 1:
         return []
     else:
-        return tokenize_and_stem(text[1].split("\n\n")[0])
+        return tokenize_and_stem(text[1].split("\n\n", maxsplit=1)[0])
 
 
 # >>>
@@ -356,7 +427,6 @@ class WikiXMLHandler(xml.sax.ContentHandler):
 
         self.current_element = ""
 
-        self.article_id = ""
         self.article_title = ""
         self.article_text = ""
 
@@ -382,20 +452,16 @@ class WikiXMLHandler(xml.sax.ContentHandler):
                     title, body, infobox, categories, external_links, references
                 )
 
-            self.article_id = ""
             self.article_title = ""
             self.article_text = ""
 
     def characters(self, content):
 
-        if self.current_element == "id" and self.article_id == "":
-            self.article_id = content
-
-        elif self.current_element == "title":
-            self.article_title += content
+        if self.current_element == "title":
+            self.article_title = f"{self.article_title}{content}"
 
         elif self.current_element == "text":
-            self.article_text += content
+            self.article_text = f"{self.article_text}{content}"
 
 
 # >>>
@@ -421,61 +487,56 @@ if __name__ == "__main__":
 
     os.mkdir(index_dir)
 
-    import cProfile
-    import pstats
+    wiki_xml_handler = WikiXMLHandler()
 
-    with cProfile.Profile() as pr:
+    xml_parser = xml.sax.make_parser()
+    xml_parser.setFeature(xml.sax.handler.feature_namespaces, 0)
+    xml_parser.setContentHandler(wiki_xml_handler)
+    xml_parser.parse(dump_file)
 
-        # Start Parsing
+    write_pages_in_temp_index_files(
+        FIELD_TYPE_TITLE,
+        INDEX_MAP_TITLE,
+        TEMP_INDEX_FILE_COUNT,
+    )
+    write_pages_in_temp_index_files(
+        FIELD_TYPE_BODY,
+        INDEX_MAP_BODY,
+        TEMP_INDEX_FILE_COUNT,
+    )
+    write_pages_in_temp_index_files(
+        FIELD_TYPE_INFOBOX,
+        INDEX_MAP_INFOBOX,
+        TEMP_INDEX_FILE_COUNT,
+    )
+    write_pages_in_temp_index_files(
+        FIELD_TYPE_CATEGORIES,
+        INDEX_MAP_CATEGORIES,
+        TEMP_INDEX_FILE_COUNT,
+    )
+    write_pages_in_temp_index_files(
+        FIELD_TYPE_EXTERNAL_LINKS,
+        INDEX_MAP_EXTERNAL_LINKS,
+        TEMP_INDEX_FILE_COUNT,
+    )
+    write_pages_in_temp_index_files(
+        FIELD_TYPE_REFERENCES,
+        INDEX_MAP_REFERENCES,
+        TEMP_INDEX_FILE_COUNT,
+    )
 
-        wiki_xml_handler = WikiXMLHandler()
+    INDEX_MAP_TITLE.clear()
+    INDEX_MAP_BODY.clear()
+    INDEX_MAP_INFOBOX.clear()
+    INDEX_MAP_CATEGORIES.clear()
+    INDEX_MAP_EXTERNAL_LINKS.clear()
+    INDEX_MAP_REFERENCES.clear()
 
-        xml_parser = xml.sax.make_parser()
-        xml_parser.setFeature(xml.sax.handler.feature_namespaces, 0)
-        xml_parser.setContentHandler(wiki_xml_handler)
-        xml_parser.parse(dump_file)
+    TEMP_INDEX_FILE_COUNT += 1
 
-        write_pages_in_temp_index_files(
-            FIELD_TYPE_TITLE,
-            INDEX_MAP_TITLE,
-            TEMP_INDEX_FILE_COUNT,
-        )
-        write_pages_in_temp_index_files(
-            FIELD_TYPE_BODY,
-            INDEX_MAP_BODY,
-            TEMP_INDEX_FILE_COUNT,
-        )
-        write_pages_in_temp_index_files(
-            FIELD_TYPE_INFOBOX,
-            INDEX_MAP_INFOBOX,
-            TEMP_INDEX_FILE_COUNT,
-        )
-        write_pages_in_temp_index_files(
-            FIELD_TYPE_CATEGORIES,
-            INDEX_MAP_CATEGORIES,
-            TEMP_INDEX_FILE_COUNT,
-        )
-        write_pages_in_temp_index_files(
-            FIELD_TYPE_EXTERNAL_LINKS,
-            INDEX_MAP_EXTERNAL_LINKS,
-            TEMP_INDEX_FILE_COUNT,
-        )
-        write_pages_in_temp_index_files(
-            FIELD_TYPE_REFERENCES,
-            INDEX_MAP_REFERENCES,
-            TEMP_INDEX_FILE_COUNT,
-        )
-
-        INDEX_MAP_TITLE.clear()
-        INDEX_MAP_BODY.clear()
-        INDEX_MAP_INFOBOX.clear()
-        INDEX_MAP_CATEGORIES.clear()
-        INDEX_MAP_EXTERNAL_LINKS.clear()
-        INDEX_MAP_REFERENCES.clear()
-
-        TEMP_INDEX_FILE_COUNT += 1
-
-    stats = pstats.Stats(pr)
-    stats.sort_stats(pstats.SortKey.TIME)
-    # stats.print_stats()
-    stats.dump_stats(filename="needs_profiling.prof")
+    merge_temp_index_files(FIELD_TYPE_TITLE)
+    merge_temp_index_files(FIELD_TYPE_BODY)
+    merge_temp_index_files(FIELD_TYPE_INFOBOX)
+    merge_temp_index_files(FIELD_TYPE_CATEGORIES)
+    merge_temp_index_files(FIELD_TYPE_EXTERNAL_LINKS)
+    merge_temp_index_files(FIELD_TYPE_REFERENCES)
