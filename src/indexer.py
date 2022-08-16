@@ -6,7 +6,7 @@ import string
 import sys
 
 from functools import cache
-from collections import defaultdict, Counter
+from collections import defaultdict
 
 import xml.sax
 import xml.sax.handler
@@ -99,9 +99,8 @@ def write_pages_in_temp_index_files(field_type, index_map, file_count):
     with open(index_filename, "w") as f:
         lines = []
         for token in sorted(index_map.keys()):
-            line = f"{token} {' '.join(index_map[token])}"
-            lines.append(line + "\n")
-        f.writelines(lines)
+            lines.append(f"{token} {' '.join(index_map[token])}")
+        f.writelines("\n".join(lines))
 
 
 def write_final_index_file(page_count, field_type, data):
@@ -285,52 +284,52 @@ def create_pre_index(
     ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT] = (article_id, original_title)
     # print(ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT])
 
-    # title_counter = defaultdict(int)
-    # body_counter = defaultdict(int)
-    # infobox_counter = defaultdict(int)
-    # categories_counter = defaultdict(int)
-    # external_links_counter = defaultdict(int)
-    # references_counter = defaultdict(int)
-    # combined_counter = defaultdict(int)
+    title_counter = defaultdict(int)
+    body_counter = defaultdict(int)
+    infobox_counter = defaultdict(int)
+    categories_counter = defaultdict(int)
+    external_links_counter = defaultdict(int)
+    references_counter = defaultdict(int)
+    combined_counter = defaultdict(int)
 
-    title_counter = Counter(title)
-    body_counter = Counter(body)
-    infobox_counter = Counter(infobox)
-    categories_counter = Counter(categories)
-    external_links_counter = Counter(external_links)
-    references_counter = Counter(references)
-    combined_counter = (
-        title_counter
-        + body_counter
-        + infobox_counter
-        + categories_counter
-        + external_links_counter
-        + references_counter
-    )
+    # title_counter = Counter(title)
+    # body_counter = Counter(body)
+    # infobox_counter = Counter(infobox)
+    # categories_counter = Counter(categories)
+    # external_links_counter = Counter(external_links)
+    # references_counter = Counter(references)
+    # combined_counter = (
+    #     title_counter
+    #     + body_counter
+    #     + infobox_counter
+    #     + categories_counter
+    #     + external_links_counter
+    #     + references_counter
+    # )
 
-    # for token in title:
-    #     title_counter[token] += 1
-    #     combined_counter[token] += 1
-    #
-    # for token in body:
-    #     body_counter[token] += 1
-    #     combined_counter[token] += 1
-    #
-    # for token in infobox:
-    #     infobox_counter[token] += 1
-    #     combined_counter[token] += 1
-    #
-    # for token in categories:
-    #     categories_counter[token] += 1
-    #     combined_counter[token] += 1
-    #
-    # for token in external_links:
-    #     external_links_counter[token] += 1
-    #     combined_counter[token] += 1
-    #
-    # for token in references:
-    #     references_counter[token] += 1
-    #     combined_counter[token] += 1
+    for token in title:
+        title_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in body:
+        body_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in infobox:
+        infobox_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in categories:
+        categories_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in external_links:
+        external_links_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in references:
+        references_counter[token] += 1
+        combined_counter[token] += 1
 
     for token in combined_counter:
         in_title = title_counter[token]
@@ -592,9 +591,10 @@ class WikiXMLHandler(xml.sax.ContentHandler):
             self.article_title = self.article_title.strip()
             self.article_text = self.article_text.strip()
 
-            if not any(
-                self.article_title.startswith(s)
-                for s in {"Wikipedia:", "File:", "Template:"}
+            if (
+                (not self.article_title.startswith("Wikipedia:"))
+                and (not self.article_title.startswith("File:"))
+                and (not self.article_title.startswith("Template:"))
             ):
                 (
                     title,
@@ -649,6 +649,10 @@ if __name__ == "__main__":
         shutil.rmtree(index_dir)
 
     os.mkdir(index_dir)
+
+    # import cProfile, pstats
+    #
+    # with cProfile.Profile() as prof:
 
     wiki_xml_handler = WikiXMLHandler()
 
@@ -717,3 +721,7 @@ if __name__ == "__main__":
             f"Total number of tokens encountered in dump : {len(UNSTEMMED_TOKENS):,}\n"
         )
         f.write(f"Total number of tokens in inverted index : {len(STEMMED_TOKENS)}\n")
+
+    # stats = pstats.Stats(prof)
+    # stats.sort_stats(pstats.SortKey.TIME)
+    # stats.dump_stats(filename="prof.prof")
