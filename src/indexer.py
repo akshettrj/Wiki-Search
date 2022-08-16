@@ -5,7 +5,8 @@ import shutil
 import string
 import sys
 
-from collections import defaultdict
+from functools import cache
+from collections import defaultdict, Counter
 
 import xml.sax
 import xml.sax.handler
@@ -63,6 +64,14 @@ def base_64_decode(chars):
     for char in chars:
         num = num * ENCODING_BASE + ENCODING_CHAR_TO_INDEX[char]
     return num
+
+
+# >>>
+
+# Utils <<<
+@cache
+def stem_word(token):
+    return ENGLISH_STEMMER.stemWord(token)
 
 
 # >>>
@@ -145,8 +154,7 @@ def merge_temp_index_files(field_type):
         if current_word == top_element[0] or current_word == "":
             current_frequency += 1
             current_word, _ = top_element
-            current_data += " "
-            current_data += " ".join(top_line_words[new_file_num][1:])
+            current_data += " " + " ".join(top_line_words[new_file_num][1:])
         else:
             data.append(current_data)
             buffer_token_count += 1
@@ -277,37 +285,52 @@ def create_pre_index(
     ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT] = (article_id, original_title)
     # print(ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT])
 
-    title_counter = defaultdict(int)
-    body_counter = defaultdict(int)
-    infobox_counter = defaultdict(int)
-    categories_counter = defaultdict(int)
-    external_links_counter = defaultdict(int)
-    references_counter = defaultdict(int)
-    combined_counter = defaultdict(int)
+    # title_counter = defaultdict(int)
+    # body_counter = defaultdict(int)
+    # infobox_counter = defaultdict(int)
+    # categories_counter = defaultdict(int)
+    # external_links_counter = defaultdict(int)
+    # references_counter = defaultdict(int)
+    # combined_counter = defaultdict(int)
 
-    for token in title:
-        title_counter[token] += 1
-        combined_counter[token] += 1
+    title_counter = Counter(title)
+    body_counter = Counter(body)
+    infobox_counter = Counter(infobox)
+    categories_counter = Counter(categories)
+    external_links_counter = Counter(external_links)
+    references_counter = Counter(references)
+    combined_counter = (
+        title_counter
+        + body_counter
+        + infobox_counter
+        + categories_counter
+        + external_links_counter
+        + references_counter
+    )
 
-    for token in body:
-        body_counter[token] += 1
-        combined_counter[token] += 1
-
-    for token in infobox:
-        infobox_counter[token] += 1
-        combined_counter[token] += 1
-
-    for token in categories:
-        categories_counter[token] += 1
-        combined_counter[token] += 1
-
-    for token in external_links:
-        external_links_counter[token] += 1
-        combined_counter[token] += 1
-
-    for token in references:
-        references_counter[token] += 1
-        combined_counter[token] += 1
+    # for token in title:
+    #     title_counter[token] += 1
+    #     combined_counter[token] += 1
+    #
+    # for token in body:
+    #     body_counter[token] += 1
+    #     combined_counter[token] += 1
+    #
+    # for token in infobox:
+    #     infobox_counter[token] += 1
+    #     combined_counter[token] += 1
+    #
+    # for token in categories:
+    #     categories_counter[token] += 1
+    #     combined_counter[token] += 1
+    #
+    # for token in external_links:
+    #     external_links_counter[token] += 1
+    #     combined_counter[token] += 1
+    #
+    # for token in references:
+    #     references_counter[token] += 1
+    #     combined_counter[token] += 1
 
     for token in combined_counter:
         in_title = title_counter[token]
@@ -472,7 +495,7 @@ def tokenize_and_stem(text):
     for token in text:
         UNSTEMMED_TOKENS.add(token)
 
-    text = list(ENGLISH_STEMMER.stemWords(text))
+    text = [stem_word(token) for token in text]
     text = [
         token
         for token in text
