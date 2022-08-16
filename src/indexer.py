@@ -5,8 +5,7 @@ import shutil
 import string
 import sys
 
-from collections import defaultdict, Counter
-from typing import OrderedDict
+from collections import defaultdict
 
 import xml.sax
 import xml.sax.handler
@@ -73,10 +72,14 @@ def write_article_id_to_title_mappings(index_map, file_count):
 
     file_name = os.path.join(index_dir, f"article_titles_{file_count}.txt")
     with open(file_name, "w") as f:
-        lines = [
-            f"{index_map[num][0]}:{index_map[num][1]}" for num in sorted(index_map)
-        ]
-        f.write("\n".join(lines))
+        f.write(
+            "\n".join(
+                [
+                    f"{index_map[num][0]}:{index_map[num][1]}"
+                    for num in sorted(index_map)
+                ]
+            )
+        )
 
 
 def write_pages_in_temp_index_files(field_type, index_map, file_count):
@@ -105,17 +108,20 @@ def write_final_index_file(page_count, field_type, data):
 
 def merge_temp_index_files(field_type):
 
-    priority_queue = []
-    fds = {}
-    top_lines = {}
-    top_line_words = {}
-    page_count = 0
-
-    top_element = ()
-    count = 1
-    current_word = ""
-    current_data = ""
-    data = []
+    (
+        priority_queue,
+        fds,
+        top_lines,
+        top_line_words,
+        page_count,
+        top_element,
+        buffer_token_count,
+        current_frequency,
+        current_word,
+        current_data,
+        data,
+        vocab_data,
+    ) = ([], {}, {}, {}, 0, (), 1, 0, "", "", [], [])
 
     for file_num in range(TEMP_INDEX_FILE_COUNT):
         file_name = os.path.join(index_dir, f"temp_index_{field_type}_{file_num}.txt")
@@ -129,22 +135,26 @@ def merge_temp_index_files(field_type):
         top_element = heapq.heappop(priority_queue)
         new_file_num = top_element[1]
 
-        if count % NUMBER_OF_TOKENS_PER_FILE == 0:
+        if buffer_token_count % NUMBER_OF_TOKENS_PER_FILE == 0:
             write_final_index_file(page_count, field_type, data)
             if data:
                 page_count += 1
             data = []
-            count = 1
+            buffer_token_count = 1
 
         if current_word == top_element[0] or current_word == "":
+            current_frequency += 1
             current_word, _ = top_element
             current_data += " "
             current_data += " ".join(top_line_words[new_file_num][1:])
         else:
             data.append(current_data)
-            count += 1
+            buffer_token_count += 1
             current_word, _ = top_element
             current_data = top_lines[new_file_num]
+
+            vocab_data.append(f"{current_word} {current_frequency}-{page_count}")
+            current_frequency = 0
 
         top_lines[new_file_num] = fds[new_file_num].readline().strip()
         if top_lines[new_file_num] != "":
@@ -161,8 +171,73 @@ def merge_temp_index_files(field_type):
             os.remove(file_name)
 
     data.append(current_data)
-    count += 1
+    buffer_token_count += 1
     write_final_index_file(page_count, field_type, data)
+
+    vocab_data.append(f"{current_word} {current_frequency}-{page_count}")
+    with open(os.path.join(index_dir), f"vocab_{field_type}.txt", "a") as f:
+        f.write("\n".join(vocab_data))
+
+
+def merge_vocab_files():
+    priority_queue, top_line_words, fds, top_lines, page_count, data = (
+        [],
+        {},
+        {},
+        {},
+        0,
+        [],
+    )
+
+    fields = [
+        FIELD_TYPE_TITLE,
+        FIELD_TYPE_BODY,
+        FIELD_TYPE_INFOBOX,
+        FIELD_TYPE_CATEGORIES,
+        FIELD_TYPE_EXTERNAL_LINKS,
+        FIELD_TYPE_REFERENCES,
+    ]
+
+    for file_num in range(len(fields)):
+        file_name = os.path.join(index_dir, f"vocab_{fields[file_num]}.txt")
+        fds[file_num] = open(file_name, "r")
+        top_lines[file_num] = fds[file_num].readline().strip()
+        if top_lines[file_num] != "":
+            top_line_words[file_num] = top_lines[file_num].split()
+            heapq.heappush(priority_queue, (top_line_words[file_num][0], file_num))
+
+    top_element, current_word, current_data, current_frequency = (), "", "", 0
+
+    while len(priority_queue) > 0:
+        top_element = heapq.heappop(priority_queue)
+        new_file_num = top_element[1]
+
+        if current_word == top_element[0] or current_word == "":
+            current_data = f"{current_data} {fields[new_file_num]}-{top_line_words[new_file_num][1]}"
+            current_word = top_element[0]
+            current_frequency += 1
+        else:
+            data.append(current_data)
+            current_word = top_element[0]
+            current_data = f"{current_word} {fields[new_file_num]}-{top_line_words[new_file_num][1]}"
+            current_frequency = 0
+
+        top_lines[new_file_num] = fds[new_file_num].readline().strip()
+        if top_lines[new_file_num] == "":
+            fds[new_file_num].close()
+            top_line_words[new_file_num] = []
+            file_name = os.path.join(index_dir, f"vocab_{fields[new_file_num]}.txt")
+            os.remove(file_name)
+        else:
+            top_line_words[new_file_num] = top_lines[new_file_num].split()
+            heapq.heappush(
+                priority_queue, (top_line_words[new_file_num][0], new_file_num)
+            )
+
+    data.append(current_data)
+
+    with open(os.path.join(index_dir, "vocab.txt"), "a") as f:
+        f.write("\n".join(data))
 
 
 # >>>
@@ -202,20 +277,37 @@ def create_pre_index(
     ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT] = (article_id, original_title)
     # print(ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT])
 
-    title_counter = Counter(title)
-    body_counter = Counter(body)
-    infobox_counter = Counter(infobox)
-    categories_counter = Counter(categories)
-    external_links_counter = Counter(external_links)
-    references_counter = Counter(references)
-    combined_counter = (
-        title_counter
-        + body_counter
-        + infobox_counter
-        + categories_counter
-        + external_links_counter
-        + references_counter
-    )
+    title_counter = defaultdict(int)
+    body_counter = defaultdict(int)
+    infobox_counter = defaultdict(int)
+    categories_counter = defaultdict(int)
+    external_links_counter = defaultdict(int)
+    references_counter = defaultdict(int)
+    combined_counter = defaultdict(int)
+
+    for token in title:
+        title_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in body:
+        body_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in infobox:
+        infobox_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in categories:
+        categories_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in external_links:
+        external_links_counter[token] += 1
+        combined_counter[token] += 1
+
+    for token in references:
+        references_counter[token] += 1
+        combined_counter[token] += 1
 
     for token in combined_counter:
         in_title = title_counter[token]
@@ -595,8 +687,10 @@ if __name__ == "__main__":
     merge_temp_index_files(FIELD_TYPE_EXTERNAL_LINKS)
     merge_temp_index_files(FIELD_TYPE_REFERENCES)
 
+    merge_vocab_files()
+
     with open(stat_file, "w") as f:
         f.write(
             f"Total number of tokens encountered in dump : {len(UNSTEMMED_TOKENS):,}\n"
         )
-        f.write(f"Total number of tokens in inverted index : {len(STEMMED_TOKENS):,}\n")
+        f.write(f"Total number of tokens in inverted index : {len(STEMMED_TOKENS)}\n")
