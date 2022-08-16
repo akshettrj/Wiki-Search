@@ -6,6 +6,7 @@ import string
 import sys
 
 from collections import defaultdict, Counter
+from typing import OrderedDict
 
 import xml.sax
 import xml.sax.handler
@@ -35,6 +36,7 @@ ENGLISH_STOPWORDS = set(stopwords.words("english"))
 # Configuration variables <<<
 NUMBER_OF_PAGES_PER_PREINDEX_FILE = 15_000
 NUMBER_OF_TOKENS_PER_FILE = 50_000
+NUMBER_OF_TITLES_PER_FILE = 50_000
 # >>>
 
 # Base Conversion <<<
@@ -67,6 +69,16 @@ def base_64_decode(chars):
 # >>>
 
 # Writing Index Files <<<
+def write_article_id_to_title_mappings(index_map, file_count):
+
+    file_name = os.path.join(index_dir, f"article_titles_{file_count}.txt")
+    with open(file_name, "w") as f:
+        lines = [
+            f"{index_map[num][0]}:{index_map[num][1]}" for num in sorted(index_map)
+        ]
+        f.write("\n".join(lines))
+
+
 def write_pages_in_temp_index_files(field_type, index_map, file_count):
 
     index_filename = os.path.join(
@@ -162,11 +174,17 @@ INDEX_MAP_INFOBOX = defaultdict(list)
 INDEX_MAP_CATEGORIES = defaultdict(list)
 INDEX_MAP_EXTERNAL_LINKS = defaultdict(list)
 INDEX_MAP_REFERENCES = defaultdict(list)
+
+ARTICLE_ID_TO_TITLE_MAP = dict()
+
 PAGE_COUNT = 0
+ARTICLE_MAPPING_FILE_COUNT = 0
 TEMP_INDEX_FILE_COUNT = 0
 
 
-def create_pre_index(title, body, infobox, categories, external_links, references):
+def create_pre_index(
+    title, body, infobox, categories, external_links, references, original_title
+):
 
     global INDEX_MAP_TITLE
     global INDEX_MAP_BODY
@@ -177,7 +195,12 @@ def create_pre_index(title, body, infobox, categories, external_links, reference
     global PAGE_COUNT
     global TEMP_INDEX_FILE_COUNT
 
+    global ARTICLE_ID_TO_TITLE_MAP
+    global ARTICLE_MAPPING_FILE_COUNT
+
     article_id = base_64_encode(PAGE_COUNT)
+    ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT] = (article_id, original_title)
+    # print(ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT])
 
     title_counter = Counter(title)
     body_counter = Counter(body)
@@ -216,6 +239,14 @@ def create_pre_index(title, body, infobox, categories, external_links, reference
             INDEX_MAP_REFERENCES[token].append(f"{article_id}:{in_references}")
 
     PAGE_COUNT += 1
+
+    if PAGE_COUNT % NUMBER_OF_TITLES_PER_FILE == 0:
+        write_article_id_to_title_mappings(
+            ARTICLE_ID_TO_TITLE_MAP, ARTICLE_MAPPING_FILE_COUNT
+        )
+        ARTICLE_MAPPING_FILE_COUNT += 1
+        ARTICLE_ID_TO_TITLE_MAP.clear()
+
     if PAGE_COUNT % NUMBER_OF_PAGES_PER_PREINDEX_FILE == 0:
 
         write_pages_in_temp_index_files(
@@ -454,7 +485,13 @@ class WikiXMLHandler(xml.sax.ContentHandler):
                 ) = process_text(self.article_title, self.article_text)
 
                 create_pre_index(
-                    title, body, infobox, categories, external_links, references
+                    title,
+                    body,
+                    infobox,
+                    categories,
+                    external_links,
+                    references,
+                    self.article_title.strip(),
                 )
 
             self.article_title = ""
@@ -498,6 +535,12 @@ if __name__ == "__main__":
     xml_parser.setFeature(xml.sax.handler.feature_namespaces, 0)
     xml_parser.setContentHandler(wiki_xml_handler)
     xml_parser.parse(dump_file)
+
+    if len(ARTICLE_ID_TO_TITLE_MAP) != 0:
+        write_article_id_to_title_mappings(
+            ARTICLE_ID_TO_TITLE_MAP, ARTICLE_MAPPING_FILE_COUNT
+        )
+    ARTICLE_ID_TO_TITLE_MAP.clear()
 
     write_pages_in_temp_index_files(
         FIELD_TYPE_TITLE,
