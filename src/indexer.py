@@ -175,17 +175,17 @@ def merge_temp_index_files(field_type):
     write_final_index_file(page_count, field_type, data)
 
     vocab_data.append(f"{current_word} {current_frequency}-{page_count}")
-    with open(os.path.join(index_dir), f"vocab_{field_type}.txt", "a") as f:
+    file_name = os.path.join(index_dir, f"vocab_{field_type}.txt")
+    with open(file_name, "a") as f:
         f.write("\n".join(vocab_data))
 
 
 def merge_vocab_files():
-    priority_queue, top_line_words, fds, top_lines, page_count, data = (
+    priority_queue, top_line_words, fds, top_lines, data = (
         [],
         {},
         {},
         {},
-        0,
         [],
     )
 
