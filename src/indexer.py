@@ -474,7 +474,13 @@ class WikiXMLHandler(xml.sax.ContentHandler):
 
         if name == "page":
 
-            if not self.article_title.startswith("Wikipedia:"):
+            self.article_title = self.article_title.strip()
+            self.article_text = self.article_text.strip()
+
+            if not any(
+                self.article_title.startswith(s)
+                for s in {"Wikipedia:", "File:", "Template:"}
+            ):
                 (
                     title,
                     body,
