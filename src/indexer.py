@@ -210,7 +210,7 @@ NUMBER_OF_TITLES_PER_FILE = 50_000
 # >>>
 
 # Base Conversion <<<
-ENCODING_CHARS = string.digits + string.ascii_lowercase + string.ascii_uppercase + "+="
+ENCODING_CHARS = "#+" + string.digits + string.ascii_uppercase + string.ascii_lowercase
 ENCODING_CHAR_TO_INDEX = dict(
     (char, indx) for (indx, char) in enumerate(ENCODING_CHARS)
 )
