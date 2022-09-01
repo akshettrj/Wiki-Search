@@ -4,6 +4,7 @@ import re
 import shutil
 import string
 import sys
+import pickle as pkl
 
 from functools import cache
 from collections import defaultdict
@@ -210,7 +211,9 @@ NUMBER_OF_TITLES_PER_FILE = 50_000
 # >>>
 
 # Base Conversion <<<
-ENCODING_CHARS = "#+" + string.digits + string.ascii_uppercase + string.ascii_lowercase
+ENCODING_CHARS = "".join(
+    ["#+", string.digits, string.ascii_uppercase, string.ascii_lowercase]
+)
 ENCODING_CHAR_TO_INDEX = dict(
     (char, indx) for (indx, char) in enumerate(ENCODING_CHARS)
 )
@@ -247,18 +250,34 @@ def stem_word(token):
 # >>>
 
 # Writing Index Files <<<
-def write_article_id_to_title_mappings(index_map, file_count):
+def write_article_id_to_title_mappings(titles, offsets, file_count):
+
+    global ARTICLE_TITLE_PRE_INDEX
 
     file_name = os.path.join(index_dir, f"article_titles_{file_count}.txt")
     with open(file_name, "w") as f:
-        f.write(
-            "\n".join(
-                [
-                    f"{index_map[num][0]}:{index_map[num][1]}"
-                    for num in sorted(index_map)
-                ]
-            )
-        )
+        f.write("\n".join(titles))
+
+    ARTICLE_TITLE_PRE_INDEX.append(titles[0].split(maxsplit=1)[0])
+
+    # starting_article = titles[0].split()
+    # with open(os.path.join(index_dir, "article_titles_pre_index.txt"), "a+") as f:
+    #     f.write(starting_article[0])
+    #
+    # file_name = os.path.join(index_dir, f"article_titles_offset_{file_count}.txt")
+    # with open(file_name, "w") as f:
+    #     f.write("\n".join(offsets))
+
+
+def write_temp_idf_files(token_to_idf_map, file_count):
+
+    file_name = os.path.join(index_dir, f"temp_idf_{file_count}.txt")
+    with open(file_name, "w") as f:
+        lines = [
+            f"{token} {token_to_idf_map[token]}"
+            for token in sorted(token_to_idf_map.keys())
+        ]
+        f.write("\n".join(lines))
 
 
 def write_pages_in_temp_index_files(field_type, index_map, file_count):
@@ -267,21 +286,23 @@ def write_pages_in_temp_index_files(field_type, index_map, file_count):
         index_dir, f"temp_index_{field_type}_{file_count}.txt"
     )
     with open(index_filename, "w") as f:
-        lines = []
-        for token in sorted(index_map.keys()):
-            lines.append(f"{token} {' '.join(index_map[token])}")
+        lines = [
+            f"{token} {' '.join(index_map[token])}"
+            for token in sorted(index_map.keys())
+        ]
         f.writelines("\n".join(lines))
 
 
-def write_final_index_file(page_count, field_type, data):
+def write_final_index_file(page_count, field_type, data, offsets):
 
     file_name = os.path.join(index_dir, f"index_{field_type}_{page_count}.txt")
 
-    if not data:
-        return
-
     with open(file_name, "a") as f:
         f.write("\n".join(data))
+
+    file_name = os.path.join(index_dir, f"offsets_{field_type}_{page_count}.pkl")
+    with open(file_name, "wb") as f:
+        pkl.dump(offsets, f)
 
 
 def merge_temp_index_files(field_type):
@@ -299,7 +320,8 @@ def merge_temp_index_files(field_type):
         current_data,
         data,
         vocab_data,
-    ) = ([], {}, {}, {}, 0, (), 1, 0, "", "", [], [])
+        offsets,
+    ) = ([], {}, {}, {}, 0, (), 1, 0, "", "", [], [], [0])
 
     for file_num in range(TEMP_INDEX_FILE_COUNT):
         file_name = os.path.join(index_dir, f"temp_index_{field_type}_{file_num}.txt")
@@ -314,11 +336,12 @@ def merge_temp_index_files(field_type):
         new_file_num = top_element[1]
 
         if buffer_token_count % NUMBER_OF_TOKENS_PER_FILE == 0:
-            write_final_index_file(page_count, field_type, data)
+            write_final_index_file(page_count, field_type, data, offsets)
             if data:
                 page_count += 1
             data = []
             buffer_token_count = 1
+            offsets = [0]
 
         if current_word == top_element[0] or current_word == "":
             current_frequency += 1
@@ -326,6 +349,7 @@ def merge_temp_index_files(field_type):
             current_data += " " + " ".join(top_line_words[new_file_num][1:])
         else:
             data.append(current_data)
+            offsets.append(len(current_data) + 1 + offsets[-1])
             buffer_token_count += 1
             current_word, _ = top_element
             current_data = top_lines[new_file_num]
@@ -348,8 +372,9 @@ def merge_temp_index_files(field_type):
             os.remove(file_name)
 
     data.append(current_data)
+    offsets.append(len(current_data) + 1 + offsets[-1])
     buffer_token_count += 1
-    write_final_index_file(page_count, field_type, data)
+    write_final_index_file(page_count, field_type, data, offsets)
 
     vocab_data.append(f"{current_word} {current_frequency}-{page_count}")
     file_name = os.path.join(index_dir, f"vocab_{field_type}.txt")
@@ -358,6 +383,7 @@ def merge_temp_index_files(field_type):
 
 
 def merge_vocab_files():
+
     priority_queue, top_line_words, fds, top_lines, data = (
         [],
         {},
@@ -417,6 +443,36 @@ def merge_vocab_files():
         f.write("\n".join(data))
 
 
+def merge_idf_files():
+
+    priority_queue, top_line_words, fds, top_lines, file_number, data = (
+        [],
+        {},
+        {},
+        {},
+        0,
+        [],
+    )
+
+    for temp_file_num in range(TEMP_INDEX_FILE_COUNT):
+        file_name = os.path.join(index_dir, f"temp_idf_{temp_file_num}.txt")
+        fds[temp_file_num] = open(file_name, "r")
+        top_lines[temp_file_num] = fds[temp_file_num].readline().strip()
+        if top_lines[temp_file_num] != "":
+            heapq.heappush(
+                priority_queue, (top_lines[temp_file_num].split()[0], temp_file_num)
+            )
+
+    top_element, current_word, current_frequency, count, net_count = ("", "", 0, 1, 0)
+
+    while priority_queue:
+        top_element = heapq.heappop(priority_queue)
+        new_index = top_element[1]
+
+        if count % NUMBER_OF_TOKENS_PER_FILE == 0:
+            pass
+
+
 # >>>
 
 # Indexing <<<
@@ -427,7 +483,11 @@ INDEX_MAP_CATEGORIES = defaultdict(list)
 INDEX_MAP_EXTERNAL_LINKS = defaultdict(list)
 INDEX_MAP_REFERENCES = defaultdict(list)
 
-ARTICLE_ID_TO_TITLE_MAP = dict()
+ARTICLE_ID_TO_TITLE_MAP = []
+ARTICLE_TITLE_PRE_INDEX = []
+TOTAL_ARTICLE_COUNT = 0
+ARTICLE_TITLES_FILE_OFFSET = [0]
+WORD_TO_ARTICLE_COUNT = defaultdict(int)
 
 PAGE_COUNT = 0
 ARTICLE_MAPPING_FILE_COUNT = 0
@@ -449,18 +509,21 @@ def create_pre_index(
 
     global ARTICLE_ID_TO_TITLE_MAP
     global ARTICLE_MAPPING_FILE_COUNT
+    global TOTAL_ARTICLE_COUNT
+    global ARTICLE_TITLES_FILE_OFFSET
+    global WORD_TO_ARTICLE_COUNT
 
     article_id = base_64_encode(PAGE_COUNT)
-    ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT] = (article_id, original_title)
-    # print(ARTICLE_ID_TO_TITLE_MAP[PAGE_COUNT])
-
-    title_counter = defaultdict(int)
-    body_counter = defaultdict(int)
-    infobox_counter = defaultdict(int)
-    categories_counter = defaultdict(int)
-    external_links_counter = defaultdict(int)
-    references_counter = defaultdict(int)
-    combined_counter = defaultdict(int)
+    # title_file_line = (
+    #     f"{article_id} {len(title)} {len(body)} {len(infobox)} {len(categories)}"
+    #     f" {len(references)} {len(external_links)} {original_title}"
+    # )
+    title_file_line = f"{article_id} {original_title}"
+    ARTICLE_ID_TO_TITLE_MAP.append(title_file_line)
+    # ARTICLE_TITLES_FILE_OFFSET.append(
+    #     ARTICLE_TITLES_FILE_OFFSET[-1] + len(title_file_line) + 1
+    # )
+    TOTAL_ARTICLE_COUNT += 1
 
     # title_counter = Counter(title)
     # body_counter = Counter(body)
@@ -476,6 +539,14 @@ def create_pre_index(
     #     + external_links_counter
     #     + references_counter
     # )
+
+    title_counter = defaultdict(int)
+    body_counter = defaultdict(int)
+    infobox_counter = defaultdict(int)
+    categories_counter = defaultdict(int)
+    external_links_counter = defaultdict(int)
+    references_counter = defaultdict(int)
+    combined_counter = defaultdict(int)
 
     for token in title:
         title_counter[token] += 1
@@ -522,14 +593,19 @@ def create_pre_index(
         if in_references > 0:
             INDEX_MAP_REFERENCES[token].append(f"{article_id}:{in_references}")
 
+        WORD_TO_ARTICLE_COUNT[token] += 1
+
     PAGE_COUNT += 1
 
     if PAGE_COUNT % NUMBER_OF_TITLES_PER_FILE == 0:
         write_article_id_to_title_mappings(
-            ARTICLE_ID_TO_TITLE_MAP, ARTICLE_MAPPING_FILE_COUNT
+            ARTICLE_ID_TO_TITLE_MAP,
+            ARTICLE_TITLES_FILE_OFFSET,
+            ARTICLE_MAPPING_FILE_COUNT,
         )
         ARTICLE_MAPPING_FILE_COUNT += 1
-        ARTICLE_ID_TO_TITLE_MAP.clear()
+        ARTICLE_TITLES_FILE_OFFSET = [0]
+        ARTICLE_ID_TO_TITLE_MAP = []
 
     if PAGE_COUNT % NUMBER_OF_PAGES_PER_PREINDEX_FILE == 0:
 
@@ -761,10 +837,9 @@ class WikiXMLHandler(xml.sax.ContentHandler):
             self.article_title = self.article_title.strip()
             self.article_text = self.article_text.strip()
 
-            if (
-                (not self.article_title.startswith("Wikipedia:"))
-                and (not self.article_title.startswith("File:"))
-                and (not self.article_title.startswith("Template:"))
+            if not any(
+                self.article_title.startswith(meta_title)
+                for meta_title in ["Wikipedia:", "File:", "Template:"]
             ):
                 (
                     title,
@@ -799,9 +874,10 @@ class WikiXMLHandler(xml.sax.ContentHandler):
 
 # >>>
 
+# Running Script <<<
 if __name__ == "__main__":
 
-    # Handler Arguments
+    # Handle Arguments
 
     if len(sys.argv) < 4:
         print("Expected three arguments")
@@ -833,9 +909,13 @@ if __name__ == "__main__":
 
     if len(ARTICLE_ID_TO_TITLE_MAP) != 0:
         write_article_id_to_title_mappings(
-            ARTICLE_ID_TO_TITLE_MAP, ARTICLE_MAPPING_FILE_COUNT
+            ARTICLE_ID_TO_TITLE_MAP,
+            ARTICLE_TITLES_FILE_OFFSET,
+            ARTICLE_MAPPING_FILE_COUNT,
         )
-    ARTICLE_ID_TO_TITLE_MAP.clear()
+    ARTICLE_ID_TO_TITLE_MAP = []
+    ARTICLE_TITLES_FILE_OFFSET = [0]
+    ARTICLE_MAPPING_FILE_COUNT += 1
 
     write_pages_in_temp_index_files(
         FIELD_TYPE_TITLE,
@@ -895,3 +975,4 @@ if __name__ == "__main__":
     # stats = pstats.Stats(prof)
     # stats.sort_stats(pstats.SortKey.TIME)
     # stats.dump_stats(filename="prof.prof")
+# >>>

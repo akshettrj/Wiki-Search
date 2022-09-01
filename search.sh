@@ -1,4 +1,3 @@
 #!/bin/bash
 
-echo "Search not implemented for Phase 1"
-exit
+python3 src/search.py "$@"
