@@ -1,3 +1,3 @@
 #!/bin/bash
 
-python3 src/search.py "$@"
+python3 src/searcher.py "$@"

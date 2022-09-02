@@ -5,7 +5,7 @@ import shutil
 import string
 import sys
 import math
-import pickle as pkl
+import time
 
 from functools import cache
 from collections import defaultdict
@@ -247,18 +247,22 @@ def stem_word(token):
     return ENGLISH_STEMMER.stemWord(token)
 
 
+def handle_frequency(num, sig):
+    num = math.log10(num)
+    return round(num, sig - int(math.floor(math.log10(abs(num)))) - 1)
+
+
 # >>>
 
 # Writing Index Files <<<
-def write_article_id_to_title_mappings(titles, offsets, file_count):
+def write_article_id_to_title_mappings(titles, _, file_count):
 
     global ARTICLE_TITLE_PRE_INDEX
+    ARTICLE_TITLE_PRE_INDEX.append(titles[0].split(maxsplit=1)[0])
 
     file_name = os.path.join(index_dir, f"article_titles_{file_count}.txt")
     with open(file_name, "w") as f:
         f.write("\n".join(titles))
-
-    ARTICLE_TITLE_PRE_INDEX.append(titles[0].split(maxsplit=1)[0])
 
     # starting_article = titles[0].split()
     # with open(os.path.join(index_dir, "article_titles_pre_index.txt"), "a+") as f:
@@ -455,7 +459,7 @@ def merge_temp_idf_files():
             current_frequency += frequencies[new_file_num]
         else:
             buffer_token_count += 1
-            freq = math.log10(TOTAL_ARTICLE_COUNT / current_frequency)
+            freq = handle_frequency(TOTAL_ARTICLE_COUNT / current_frequency, 6)
             data.append(f"{current_word} {freq}")
             current_word = top_element[0]
             current_frequency = frequencies[new_file_num]
@@ -471,7 +475,7 @@ def merge_temp_idf_files():
             frequencies[new_file_num] = int(top_line[1])
             heapq.heappush(priority_queue, (top_line[0], new_file_num))
 
-    freq = math.log10(TOTAL_ARTICLE_COUNT / current_frequency)
+    freq = handle_frequency(TOTAL_ARTICLE_COUNT / current_frequency, 6)
     data.append(f"{current_word} {freq}")
     write_final_idf_files(data, page_count)
 
@@ -587,17 +591,25 @@ def create_pre_index(
         in_references = references_counter[token]
 
         if in_title > 0:
-            INDEX_MAP_TITLE[token].append(f"{article_id}:{in_title}")
+            INDEX_MAP_TITLE[token].append(f"{article_id}:{base_64_encode(in_title)}")
         if in_body > 0:
-            INDEX_MAP_BODY[token].append(f"{article_id}:{in_body}")
+            INDEX_MAP_BODY[token].append(f"{article_id}:{base_64_encode(in_body)}")
         if in_infobox > 0:
-            INDEX_MAP_INFOBOX[token].append(f"{article_id}:{in_infobox}")
+            INDEX_MAP_INFOBOX[token].append(
+                f"{article_id}:{base_64_encode(in_infobox)}"
+            )
         if in_categories > 0:
-            INDEX_MAP_CATEGORIES[token].append(f"{article_id}:{in_categories}")
+            INDEX_MAP_CATEGORIES[token].append(
+                f"{article_id}:{base_64_encode(in_categories)}"
+            )
         if in_external_links > 0:
-            INDEX_MAP_EXTERNAL_LINKS[token].append(f"{article_id}:{in_external_links}")
+            INDEX_MAP_EXTERNAL_LINKS[token].append(
+                f"{article_id}:{base_64_encode(in_external_links)}"
+            )
         if in_references > 0:
-            INDEX_MAP_REFERENCES[token].append(f"{article_id}:{in_references}")
+            INDEX_MAP_REFERENCES[token].append(
+                f"{article_id}:{base_64_encode(in_references)}"
+            )
 
         TOKEN_TO_ARTICLE_COUNT[token] += 1
 
@@ -885,7 +897,7 @@ if __name__ == "__main__":
     # Handle Arguments
 
     if len(sys.argv) < 4:
-        print("Expected three arguments")
+        print("Expected three arguments: dump_file, index_dir & stats_file")
         exit(1)
 
     dump_file = sys.argv[1]
@@ -904,6 +916,8 @@ if __name__ == "__main__":
     # import cProfile, pstats
     #
     # with cProfile.Profile() as prof:
+
+    start_time = time.perf_counter()
 
     wiki_xml_handler = WikiXMLHandler()
 
@@ -974,11 +988,14 @@ if __name__ == "__main__":
 
     write_pre_index_files()
 
+    elapsed_time = time.perf_counter() - start_time
+
     with open(stat_file, "w") as f:
         f.write(
             f"Total number of tokens encountered in dump : {len(UNSTEMMED_TOKENS):,}\n"
         )
         f.write(f"Total number of tokens in inverted index : {net_count}\n")
+        f.write(f"Total time taken to index : {elapsed_time} seconds")
 
     # stats = pstats.Stats(prof)
     # stats.sort_stats(pstats.SortKey.TIME)
