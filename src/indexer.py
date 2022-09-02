@@ -4,6 +4,7 @@ import re
 import shutil
 import string
 import sys
+import math
 import pickle as pkl
 
 from functools import cache
@@ -15,7 +16,6 @@ import xml.sax.handler
 from Stemmer import Stemmer
 
 UNSTEMMED_TOKENS = set()
-STEMMED_TOKENS = set()
 ENGLISH_STEMMER = Stemmer("english")
 
 # Constants <<<
@@ -293,104 +293,30 @@ def write_pages_in_temp_index_files(field_type, index_map, file_count):
         f.writelines("\n".join(lines))
 
 
-def write_final_index_file(page_count, field_type, data, offsets):
+def write_final_idf_files(data, file_count):
+    global IDF_PRE_INDEX
+    IDF_PRE_INDEX.append(data[0].split()[0])
 
-    file_name = os.path.join(index_dir, f"index_{field_type}_{page_count}.txt")
-
-    with open(file_name, "a") as f:
+    file_name = os.path.join(index_dir, f"idf_{file_count}.txt")
+    with open(file_name, "w") as f:
         f.write("\n".join(data))
 
-    file_name = os.path.join(index_dir, f"offsets_{field_type}_{page_count}.pkl")
-    with open(file_name, "wb") as f:
-        pkl.dump(offsets, f)
+
+def write_final_index_file(page_count, field_type, data, offsets):
+
+    global TOP_LINES_IN_FINAL_INDEX
+    TOP_LINES_IN_FINAL_INDEX[field_type].append(data[0].split()[0])
+
+    file_name = os.path.join(index_dir, f"index_{field_type}_{page_count}.txt")
+    with open(file_name, "w") as f:
+        f.write("\n".join(data))
+
+    file_name = os.path.join(index_dir, f"offsets_{field_type}_{page_count}.txt")
+    with open(file_name, "w") as f:
+        f.write("\n".join([f"{offset}" for offset in offsets]))
 
 
-def merge_temp_index_files(field_type):
-
-    (
-        priority_queue,
-        fds,
-        top_lines,
-        top_line_words,
-        page_count,
-        top_element,
-        buffer_token_count,
-        current_frequency,
-        current_word,
-        current_data,
-        data,
-        vocab_data,
-        offsets,
-    ) = ([], {}, {}, {}, 0, (), 1, 0, "", "", [], [], [0])
-
-    for file_num in range(TEMP_INDEX_FILE_COUNT):
-        file_name = os.path.join(index_dir, f"temp_index_{field_type}_{file_num}.txt")
-        fds[file_num] = open(file_name, "r")
-        top_lines[file_num] = fds[file_num].readline().strip()
-        if top_lines != "":
-            top_line_words[file_num] = top_lines[file_num].split()
-            heapq.heappush(priority_queue, (top_line_words[file_num][0], file_num))
-
-    while len(priority_queue) != 0:
-        top_element = heapq.heappop(priority_queue)
-        new_file_num = top_element[1]
-
-        if buffer_token_count % NUMBER_OF_TOKENS_PER_FILE == 0:
-            write_final_index_file(page_count, field_type, data, offsets)
-            if data:
-                page_count += 1
-            data = []
-            buffer_token_count = 1
-            offsets = [0]
-
-        if current_word == top_element[0] or current_word == "":
-            current_frequency += 1
-            current_word, _ = top_element
-            current_data += " " + " ".join(top_line_words[new_file_num][1:])
-        else:
-            data.append(current_data)
-            offsets.append(len(current_data) + 1 + offsets[-1])
-            buffer_token_count += 1
-            current_word, _ = top_element
-            current_data = top_lines[new_file_num]
-
-            vocab_data.append(f"{current_word} {current_frequency}-{page_count}")
-            current_frequency = 0
-
-        top_lines[new_file_num] = fds[new_file_num].readline().strip()
-        if top_lines[new_file_num] != "":
-            top_line_words[new_file_num] = top_lines[new_file_num].split()
-            heapq.heappush(
-                priority_queue, (top_line_words[new_file_num][0], new_file_num)
-            )
-        else:
-            fds[new_file_num].close()
-            top_line_words[new_file_num] = []
-            file_name = os.path.join(
-                index_dir, f"temp_index_{field_type}_{new_file_num}.txt"
-            )
-            os.remove(file_name)
-
-    data.append(current_data)
-    offsets.append(len(current_data) + 1 + offsets[-1])
-    buffer_token_count += 1
-    write_final_index_file(page_count, field_type, data, offsets)
-
-    vocab_data.append(f"{current_word} {current_frequency}-{page_count}")
-    file_name = os.path.join(index_dir, f"vocab_{field_type}.txt")
-    with open(file_name, "a") as f:
-        f.write("\n".join(vocab_data))
-
-
-def merge_vocab_files():
-
-    priority_queue, top_line_words, fds, top_lines, data = (
-        [],
-        {},
-        {},
-        {},
-        [],
-    )
+def write_pre_index_files():
 
     fields = [
         FIELD_TYPE_TITLE,
@@ -401,35 +327,82 @@ def merge_vocab_files():
         FIELD_TYPE_REFERENCES,
     ]
 
-    for file_num in range(len(fields)):
-        file_name = os.path.join(index_dir, f"vocab_{fields[file_num]}.txt")
+    for field_type in fields:
+        file_name = os.path.join(index_dir, f"pre_index_{field_type}.txt")
+        with open(file_name, "w") as f:
+            f.write("\n".join(TOP_LINES_IN_FINAL_INDEX[field_type]))
+
+    file_name = os.path.join(index_dir, f"pre_index_titles.txt")
+    with open(file_name, "w") as f:
+        f.write("\n".join(ARTICLE_TITLE_PRE_INDEX))
+
+    file_name = os.path.join(index_dir, f"pre_index_idf.txt")
+    with open(file_name, "w") as f:
+        f.write("\n".join(IDF_PRE_INDEX))
+
+
+def merge_temp_index_files(field_type):
+
+    (
+        priority_queue,
+        top_lines,
+        top_line_words,
+        fds,
+        page_count,
+        buffer_token_count,
+        total_token_count,
+        current_word,
+        current_data,
+        current_frequency,
+        data,
+        offsets,
+    ) = ([], {}, {}, {}, 0, 1, 0, "", "", 0, [], [0])
+
+    for file_num in range(TEMP_INDEX_FILE_COUNT):
+        file_name = os.path.join(index_dir, f"temp_index_{field_type}_{file_num}.txt")
         fds[file_num] = open(file_name, "r")
-        top_lines[file_num] = fds[file_num].readline().strip()
-        if top_lines[file_num] != "":
+
+        top_lines[file_num] = fds[file_num].readline()
+        if top_lines[file_num].startswith(" "):
+            top_lines[file_num] = fds[file_num].readline()
+        top_lines[file_num] = top_lines[file_num].strip()
+
+        if len(top_lines[file_num]) > 0:
             top_line_words[file_num] = top_lines[file_num].split()
             heapq.heappush(priority_queue, (top_line_words[file_num][0], file_num))
-
-    top_element, current_word, current_data, current_frequency = (), "", "", 0
 
     while len(priority_queue) > 0:
         top_element = heapq.heappop(priority_queue)
         new_file_num = top_element[1]
 
-        if current_word == top_element[0] or current_word == "":
-            current_data = f"{current_data} {fields[new_file_num]}-{top_line_words[new_file_num][1]}"
+        if buffer_token_count % NUMBER_OF_TOKENS_PER_FILE == 0:
+            write_final_index_file(page_count, field_type, data, offsets)
+            page_count += 1
+            data = []
+            buffer_token_count = 1
+            offsets = [0]
+
+        if current_word == top_element[0]:
+            current_data = " ".join([current_data, *top_line_words[new_file_num][1:]])
             current_word = top_element[0]
             current_frequency += 1
         else:
-            data.append(current_data)
+            if len(current_word) > 0:
+                data.append(current_data)
+                offsets.append(len(current_data) + 1 + offsets[-1])
+                buffer_token_count += 1
+                total_token_count += 1
             current_word = top_element[0]
-            current_data = f"{current_word} {fields[new_file_num]}-{top_line_words[new_file_num][1]}"
-            current_frequency = 0
+            current_data = top_lines[new_file_num]
+            current_frequency = 1
 
         top_lines[new_file_num] = fds[new_file_num].readline().strip()
-        if top_lines[new_file_num] == "":
+        if len(top_lines[new_file_num]) == 0:
             fds[new_file_num].close()
             top_line_words[new_file_num] = []
-            file_name = os.path.join(index_dir, f"vocab_{fields[new_file_num]}.txt")
+            file_name = os.path.join(
+                index_dir, f"temp_index_{field_type}_{new_file_num}.txt"
+            )
             os.remove(file_name)
         else:
             top_line_words[new_file_num] = top_lines[new_file_num].split()
@@ -438,39 +411,69 @@ def merge_vocab_files():
             )
 
     data.append(current_data)
+    offsets.append(len(current_data) + 1 + offsets[-1])
+    buffer_token_count += 1
+    write_final_index_file(page_count, field_type, data, offsets)
 
-    with open(os.path.join(index_dir, "vocab.txt"), "a") as f:
-        f.write("\n".join(data))
+    return total_token_count
 
 
-def merge_idf_files():
+def merge_temp_idf_files():
 
-    priority_queue, top_line_words, fds, top_lines, file_number, data = (
-        [],
-        {},
-        {},
-        {},
-        0,
-        [],
-    )
+    (
+        priority_queue,
+        fds,
+        frequencies,
+        page_count,
+        buffer_token_count,
+        current_word,
+        current_frequency,
+        data,
+    ) = ([], {}, {}, 0, 1, "", 0, [])
 
-    for temp_file_num in range(TEMP_INDEX_FILE_COUNT):
-        file_name = os.path.join(index_dir, f"temp_idf_{temp_file_num}.txt")
-        fds[temp_file_num] = open(file_name, "r")
-        top_lines[temp_file_num] = fds[temp_file_num].readline().strip()
-        if top_lines[temp_file_num] != "":
-            heapq.heappush(
-                priority_queue, (top_lines[temp_file_num].split()[0], temp_file_num)
-            )
+    for file_num in range(TEMP_INDEX_FILE_COUNT):
+        file_name = os.path.join(index_dir, f"temp_idf_{file_num}.txt")
+        fds[file_num] = open(file_name, "r")
+        top_line = fds[file_num].readline().strip()
+        if len(top_line) != 0:
+            top_line = top_line.split()
+            frequencies[file_num] = int(top_line[1])
+            heapq.heappush(priority_queue, (top_line[0], file_num))
 
-    top_element, current_word, current_frequency, count, net_count = ("", "", 0, 1, 0)
-
-    while priority_queue:
+    while len(priority_queue) > 0:
         top_element = heapq.heappop(priority_queue)
-        new_index = top_element[1]
+        new_file_num = top_element[1]
 
-        if count % NUMBER_OF_TOKENS_PER_FILE == 0:
-            pass
+        if buffer_token_count % NUMBER_OF_TOKENS_PER_FILE == 0:
+            write_final_idf_files(data, page_count)
+            page_count += 1
+            data = []
+            buffer_token_count = 1
+
+        if current_word == top_element[0] or current_word == "":
+            current_word = top_element[0]
+            current_frequency += frequencies[new_file_num]
+        else:
+            buffer_token_count += 1
+            freq = math.log10(TOTAL_ARTICLE_COUNT / current_frequency)
+            data.append(f"{current_word} {freq}")
+            current_word = top_element[0]
+            current_frequency = frequencies[new_file_num]
+
+        top_line = fds[new_file_num].readline().strip()
+        if len(top_line) == 0:
+            fds[new_file_num].close()
+            frequencies[new_file_num] = 0
+            file_name = os.path.join(index_dir, f"temp_idf_{new_file_num}.txt")
+            os.remove(file_name)
+        else:
+            top_line = top_line.split()
+            frequencies[new_file_num] = int(top_line[1])
+            heapq.heappush(priority_queue, (top_line[0], new_file_num))
+
+    freq = math.log10(TOTAL_ARTICLE_COUNT / current_frequency)
+    data.append(f"{current_word} {freq}")
+    write_final_idf_files(data, page_count)
 
 
 # >>>
@@ -483,11 +486,14 @@ INDEX_MAP_CATEGORIES = defaultdict(list)
 INDEX_MAP_EXTERNAL_LINKS = defaultdict(list)
 INDEX_MAP_REFERENCES = defaultdict(list)
 
+TOP_LINES_IN_FINAL_INDEX = defaultdict(list)
+
 ARTICLE_ID_TO_TITLE_MAP = []
 ARTICLE_TITLE_PRE_INDEX = []
+IDF_PRE_INDEX = []
 TOTAL_ARTICLE_COUNT = 0
 ARTICLE_TITLES_FILE_OFFSET = [0]
-WORD_TO_ARTICLE_COUNT = defaultdict(int)
+TOKEN_TO_ARTICLE_COUNT = defaultdict(int)
 
 PAGE_COUNT = 0
 ARTICLE_MAPPING_FILE_COUNT = 0
@@ -511,7 +517,7 @@ def create_pre_index(
     global ARTICLE_MAPPING_FILE_COUNT
     global TOTAL_ARTICLE_COUNT
     global ARTICLE_TITLES_FILE_OFFSET
-    global WORD_TO_ARTICLE_COUNT
+    global TOKEN_TO_ARTICLE_COUNT
 
     article_id = base_64_encode(PAGE_COUNT)
     # title_file_line = (
@@ -593,7 +599,7 @@ def create_pre_index(
         if in_references > 0:
             INDEX_MAP_REFERENCES[token].append(f"{article_id}:{in_references}")
 
-        WORD_TO_ARTICLE_COUNT[token] += 1
+        TOKEN_TO_ARTICLE_COUNT[token] += 1
 
     PAGE_COUNT += 1
 
@@ -639,6 +645,8 @@ def create_pre_index(
             INDEX_MAP_REFERENCES,
             TEMP_INDEX_FILE_COUNT,
         )
+
+        write_temp_idf_files(TOKEN_TO_ARTICLE_COUNT, TEMP_INDEX_FILE_COUNT)
 
         INDEX_MAP_TITLE.clear()
         INDEX_MAP_BODY.clear()
@@ -690,7 +698,6 @@ def process_text(title: str, text: str):
 def tokenize_and_stem(text):
 
     global UNSTEMMED_TOKENS
-    global STEMMED_TOKENS
 
     text = text.encode("ascii", errors="ignore").decode()
 
@@ -749,10 +756,8 @@ def tokenize_and_stem(text):
             and (token not in ENGLISH_STOPWORDS)
             and (3 < len(token) < 15)
         )
+        or (token.isnumeric() and len(token) <= 7)
     ]
-
-    for token in text:
-        STEMMED_TOKENS.add(token)
 
     return text
 
@@ -947,6 +952,7 @@ if __name__ == "__main__":
         INDEX_MAP_REFERENCES,
         TEMP_INDEX_FILE_COUNT,
     )
+    write_temp_idf_files(TOKEN_TO_ARTICLE_COUNT, TEMP_INDEX_FILE_COUNT)
 
     INDEX_MAP_TITLE.clear()
     INDEX_MAP_BODY.clear()
@@ -957,20 +963,22 @@ if __name__ == "__main__":
 
     TEMP_INDEX_FILE_COUNT += 1
 
-    merge_temp_index_files(FIELD_TYPE_TITLE)
-    merge_temp_index_files(FIELD_TYPE_BODY)
-    merge_temp_index_files(FIELD_TYPE_INFOBOX)
-    merge_temp_index_files(FIELD_TYPE_CATEGORIES)
-    merge_temp_index_files(FIELD_TYPE_EXTERNAL_LINKS)
-    merge_temp_index_files(FIELD_TYPE_REFERENCES)
+    net_count = 0
+    net_count += merge_temp_index_files(FIELD_TYPE_TITLE)
+    net_count += merge_temp_index_files(FIELD_TYPE_BODY)
+    net_count += merge_temp_index_files(FIELD_TYPE_INFOBOX)
+    net_count += merge_temp_index_files(FIELD_TYPE_CATEGORIES)
+    net_count += merge_temp_index_files(FIELD_TYPE_EXTERNAL_LINKS)
+    net_count += merge_temp_index_files(FIELD_TYPE_REFERENCES)
+    merge_temp_idf_files()
 
-    merge_vocab_files()
+    write_pre_index_files()
 
     with open(stat_file, "w") as f:
         f.write(
             f"Total number of tokens encountered in dump : {len(UNSTEMMED_TOKENS):,}\n"
         )
-        f.write(f"Total number of tokens in inverted index : {len(STEMMED_TOKENS)}\n")
+        f.write(f"Total number of tokens in inverted index : {net_count}\n")
 
     # stats = pstats.Stats(prof)
     # stats.sort_stats(pstats.SortKey.TIME)
