@@ -17,7 +17,8 @@
  .
 ├──  index.sh                  -- script to run indexer
 ├──  LICENSE
-├──  README.md
+├──  README.pdf
+├──  README.wiki
 ├──  requirements.txt          -- python requirements to run the program
 ├──  search.sh                 -- script to search from index
 └──  src                       -- python files
@@ -73,9 +74,9 @@
 |   7   | `index_r_*.txt`              | the documents ids and count for all the tokens in references section of documents | `{token} {doc1_id:count1} {doc2_id:count2} ...` |
 |   8   | `index_t_*.txt`              | the documents ids and count for all the tokens in title of documents              | `{token} {doc1_id:count1} {doc2_id:count2} ...` |
 |   9   | `offsets_{field_type}_*.txt` | the offsets of each line in bytes for each field type and index file              | `{offset}`                                      |
-|   10   | `pre_index_{field_type}.txt` | the first lines of each index file for each type                                  | `{line}`                                        |
-|   11   | `pre_index_idf.txt`          | the first lines of each idf file                                                  | `{line}`                                        |
-|   12   | `pre_index_titles.txt`       | the first lines of each title                                                     | `{line}`                                        |
+|  10   | `pre_index_{field_type}.txt` | the first lines of each index file for each type                                  | `{line}`                                        |
+|  11   | `pre_index_idf.txt`          | the first lines of each idf file                                                  | `{line}`                                        |
+|  12   | `pre_index_titles.txt`       | the first lines of each title                                                     | `{line}`                                        |
 
 == Running the Code ==
 
