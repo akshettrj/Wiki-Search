@@ -295,13 +295,21 @@ FIELD_TYPE_REFERENCES = "r"
 # >>>
 
 # Configuration <<<
-FIELD_TYPE_TO_WEIGHT_MAP = {
-    FIELD_TYPE_TITLE: 2000,
+FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY = {
+    FIELD_TYPE_TITLE: 2_500,
     FIELD_TYPE_BODY: 50,
-    FIELD_TYPE_INFOBOX: 200,
-    FIELD_TYPE_CATEGORIES: 100,
+    FIELD_TYPE_INFOBOX: 2_100,
+    FIELD_TYPE_CATEGORIES: 2_000,
     FIELD_TYPE_EXTERNAL_LINKS: 10,
     FIELD_TYPE_REFERENCES: 25,
+}
+FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY = {
+    FIELD_TYPE_TITLE: 2_500,
+    FIELD_TYPE_BODY: 300,
+    FIELD_TYPE_INFOBOX: 2_100,
+    FIELD_TYPE_CATEGORIES: 2_000,
+    FIELD_TYPE_EXTERNAL_LINKS: 1_500,
+    FIELD_TYPE_REFERENCES: 1_500,
 }
 NUM_RESULTS_PER_QUERY = 10
 # >>>
@@ -409,12 +417,12 @@ def get_line_from_title_file(enc_doc_id, file_num):
 # >>>
 
 
-def calculate_query_score(token, field_type, scores_map, weighted=True):
+def calculate_query_score(token, field_type, scores_map, is_field_query=False):
 
     file_num = get_file_num_for_query(field_type, token)
     index_file_line = get_line_from_file(field_type, file_num, token)
     token_idf = get_token_idf(token)
-    field_weight = FIELD_TYPE_TO_WEIGHT_MAP[field_type] if weighted else 1
+    field_weight = FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY[field_type] if is_field_query else FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY[field_type]
     for document in index_file_line[1:]:
         enc_doc_id, enc_tf = document.split(":")
         token_tf = base_64_decode(enc_tf)
@@ -443,14 +451,14 @@ def get_search_results(search_string: str):
 
         for field_type in all_fields:
             for token in query:
-                calculate_query_score(token, field_type, scores_map, True)
+                calculate_query_score(token, field_type, scores_map, False)
     else:
         # Field specific query
         for match in re.findall(r"([t|b|c|i|l|r]):([^:]*)(?!\S)", search_string):
             field, query_string = match
             query = process_query(query_string)
             for token in query:
-                calculate_query_score(token, field, scores_map, False)
+                calculate_query_score(token, field, scores_map, True)
 
     priority_queue = [(-v, k) for k, v in scores_map.items()]
     heapq.heapify(priority_queue)

@@ -6,6 +6,7 @@ import string
 import sys
 import math
 import time
+import subprocess
 
 from functools import cache
 from collections import defaultdict
@@ -990,12 +991,19 @@ if __name__ == "__main__":
 
     elapsed_time = time.perf_counter() - start_time
 
+    print(f"Indexing took {elapsed_time} seconds.")
+
     with open(stat_file, "w") as f:
-        f.write(
-            f"Total number of tokens encountered in dump : {len(UNSTEMMED_TOKENS):,}\n"
+        index_size = (
+            subprocess.check_output(["du", "-hs", index_dir]).split()[0].decode("utf-8")
         )
-        f.write(f"Total number of tokens in inverted index : {net_count}\n")
-        f.write(f"Total time taken to index : {elapsed_time} seconds")
+        files_count = len(
+            subprocess.check_output(["find", index_dir, "-type", "f"])
+            .decode("utf-8")
+            .split("\n")
+        )
+
+        f.write(f"{index_size}\n{net_count}\n{files_count}")
 
     # stats = pstats.Stats(prof)
     # stats.sort_stats(pstats.SortKey.TIME)
