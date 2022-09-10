@@ -18,6 +18,7 @@ from Stemmer import Stemmer
 
 UNSTEMMED_TOKENS = set()
 ENGLISH_STEMMER = Stemmer("english")
+HINDI_STEMMER = Stemmer("hindi")
 
 # Constants <<<
 FIELD_TYPE_TITLE = "t"
@@ -202,6 +203,71 @@ ENGLISH_STOPWORDS = {
     "y",
     "doe",
 }
+HINDI_STOPWORDS = {
+    "स",
+    "कुल",
+    "एस",
+    "कर",
+    "को",
+    "लिय",
+    "म",
+    "और",
+    "गय",
+    "एवं",
+    "वह",
+    "तरह",
+    "एक",
+    "बाद",
+    "इसक",
+    "जब",
+    "इसम",
+    "दिय",
+    "यह",
+    "कह",
+    "है",
+    "वर्ग",
+    "उनक",
+    "द्वार",
+    "ल",
+    "बन",
+    "वाल",
+    "रख",
+    "न",
+    "कुछ",
+    "सभ",
+    "क",
+    "तक",
+    "जैस",
+    "आद",
+    "त",
+    "सबस",
+    "रह",
+    "द",
+    "ज",
+    "य",
+    "साथ",
+    "किस",
+    "बहुत",
+    "उसक",
+    "हु",
+    "अभ",
+    "यद",
+    "थ",
+    "प",
+    "होन",
+    "आप",
+    "होत",
+    "व",
+    "अप",
+    "नह",
+    "ह",
+    "हैं",
+    "इस",
+    "किय",
+    "सक",
+    "उस",
+    "पर",
+}
 
 # >>>
 
@@ -245,6 +311,8 @@ def base_64_decode(chars):
 # Utils <<<
 @cache
 def stem_word(token):
+    if re.search(r"[\u0900-\u097F]+", token) is not None:
+        return HINDI_STEMMER.stemWord(token)
     return ENGLISH_STEMMER.stemWord(token)
 
 
@@ -712,8 +780,6 @@ def tokenize_and_stem(text):
 
     global UNSTEMMED_TOKENS
 
-    text = text.encode("ascii", errors="ignore").decode()
-
     for sym in {
         "&nbsp;",
         "&lt;",
@@ -757,6 +823,13 @@ def tokenize_and_stem(text):
 
     text = text.split()
 
+    text = [
+        token
+        if re.search(r"[\u0900-\u097F]+", token) is not None
+        else token.encode("ascii", errors="ignore").decode()
+        for token in text
+    ]
+
     for token in text:
         UNSTEMMED_TOKENS.add(token)
 
@@ -765,8 +838,13 @@ def tokenize_and_stem(text):
         token
         for token in text
         if (
-            (token.isalpha())
+            token.isalpha()
             and (token not in ENGLISH_STOPWORDS)
+            and (3 < len(token) < 15)
+        )
+        or (
+            (re.search(r"[\u0900-\u097F]+", token) is not None)
+            and (token not in HINDI_STOPWORDS)
             and (3 < len(token) < 15)
         )
         or (token.isnumeric() and len(token) <= 7)

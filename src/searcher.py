@@ -1,4 +1,5 @@
 from collections import defaultdict
+from functools import cache
 import os
 import sys
 import time
@@ -11,6 +12,8 @@ import string
 from Stemmer import Stemmer
 
 ENGLISH_STEMMER = Stemmer("english")
+HINDI_STEMMER = Stemmer("hindi")
+
 ENGLISH_STOPWORDS = {
     "or",
     "re",
@@ -182,6 +185,71 @@ ENGLISH_STOPWORDS = {
     "y",
     "doe",
 }
+HINDI_STOPWORDS = {
+    "स",
+    "कुल",
+    "एस",
+    "कर",
+    "को",
+    "लिय",
+    "म",
+    "और",
+    "गय",
+    "एवं",
+    "वह",
+    "तरह",
+    "एक",
+    "बाद",
+    "इसक",
+    "जब",
+    "इसम",
+    "दिय",
+    "यह",
+    "कह",
+    "है",
+    "वर्ग",
+    "उनक",
+    "द्वार",
+    "ल",
+    "बन",
+    "वाल",
+    "रख",
+    "न",
+    "कुछ",
+    "सभ",
+    "क",
+    "तक",
+    "जैस",
+    "आद",
+    "त",
+    "सबस",
+    "रह",
+    "द",
+    "ज",
+    "य",
+    "साथ",
+    "किस",
+    "बहुत",
+    "उसक",
+    "हु",
+    "अभ",
+    "यद",
+    "थ",
+    "प",
+    "होन",
+    "आप",
+    "होत",
+    "व",
+    "अप",
+    "नह",
+    "ह",
+    "हैं",
+    "इस",
+    "किय",
+    "सक",
+    "उस",
+    "पर",
+}
 # >>>
 
 # Base Conversion <<<
@@ -216,14 +284,19 @@ def base_64_decode(chars):
 # >>>
 
 # Utils <<<
+@cache
+def stem_word(token):
+    if re.search(r"[\u0900-\u097F]+", token) is not None:
+        return HINDI_STEMMER.stemWord(token)
+    return ENGLISH_STEMMER.stemWord(token)
+
+
 def normalize_enc_doc_id(enc_doc_id):
     zeros_required = 8 - len(enc_doc_id)
     return f"{zeros_required*ENCODING_CHARS[0]}{enc_doc_id}"
 
 
 def process_query(query):
-
-    query = query.encode("ascii", errors="ignore").decode()
 
     for sym in {
         "&nbsp;",
@@ -268,13 +341,25 @@ def process_query(query):
 
     query = query.split()
 
-    query = ENGLISH_STEMMER.stemWords(query)
+    query = [
+        token
+        if re.search(r"[\u0900-\u097F]+", token) is not None
+        else token.encode("ascii", errors="ignore").decode()
+        for token in query
+    ]
+
+    query = [stem_word(token) for token in query]
     query = [
         token
         for token in query
         if (
-            (token.isalpha())
+            token.isalpha()
             and (token not in ENGLISH_STOPWORDS)
+            and (3 < len(token) < 15)
+        )
+        or (
+            (re.search(r"[\u0900-\u097F]+", token) is not None)
+            and (token not in HINDI_STOPWORDS)
             and (3 < len(token) < 15)
         )
         or (token.isnumeric() and len(token) <= 7)
@@ -422,7 +507,11 @@ def calculate_query_score(token, field_type, scores_map, is_field_query=False):
     file_num = get_file_num_for_query(field_type, token)
     index_file_line = get_line_from_file(field_type, file_num, token)
     token_idf = get_token_idf(token)
-    field_weight = FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY[field_type] if is_field_query else FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY[field_type]
+    field_weight = (
+        FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY[field_type]
+        if is_field_query
+        else FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY[field_type]
+    )
     for document in index_file_line[1:]:
         enc_doc_id, enc_tf = document.split(":")
         token_tf = base_64_decode(enc_tf)
