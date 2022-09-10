@@ -131,6 +131,7 @@ dmypy.json
 datasets/
 profiling.png
 index_dir/
+bonus_index_dir/
 *.prof
 stats.txt
 /todo.md
