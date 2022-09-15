@@ -186,7 +186,7 @@ ENGLISH_STOPWORDS = {
 
 # Base Conversion <<<
 ENCODING_CHARS = "".join(
-    ["#+", string.digits, string.ascii_uppercase, string.ascii_lowercase]
+    ["!+", string.digits, string.ascii_uppercase, string.ascii_lowercase]
 )
 ENCODING_CHAR_TO_INDEX = dict(
     (char, indx) for (indx, char) in enumerate(ENCODING_CHARS)
@@ -296,20 +296,20 @@ FIELD_TYPE_REFERENCES = "r"
 
 # Configuration <<<
 FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY = {
-    FIELD_TYPE_TITLE: 2_500,
-    FIELD_TYPE_BODY: 50,
-    FIELD_TYPE_INFOBOX: 2_100,
-    FIELD_TYPE_CATEGORIES: 2_000,
-    FIELD_TYPE_EXTERNAL_LINKS: 10,
-    FIELD_TYPE_REFERENCES: 25,
+    FIELD_TYPE_TITLE: 55,
+    FIELD_TYPE_BODY: 1.0,
+    FIELD_TYPE_INFOBOX: 20,
+    FIELD_TYPE_CATEGORIES: 15,
+    FIELD_TYPE_EXTERNAL_LINKS: 15,
+    FIELD_TYPE_REFERENCES: 15,
 }
 FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY = {
-    FIELD_TYPE_TITLE: 2_500,
-    FIELD_TYPE_BODY: 300,
-    FIELD_TYPE_INFOBOX: 2_100,
-    FIELD_TYPE_CATEGORIES: 2_000,
-    FIELD_TYPE_EXTERNAL_LINKS: 1_500,
-    FIELD_TYPE_REFERENCES: 1_500,
+    FIELD_TYPE_TITLE: 45,
+    FIELD_TYPE_BODY: 0.3,
+    FIELD_TYPE_INFOBOX: 10,
+    FIELD_TYPE_CATEGORIES: 0.2,
+    FIELD_TYPE_EXTERNAL_LINKS: 0.1,
+    FIELD_TYPE_REFERENCES: 0.1,
 }
 NUM_RESULTS_PER_QUERY = 10
 # >>>
@@ -321,7 +321,7 @@ FIELD_TO_DOCUMENT_HEADINGS_MAP = {}
 def get_document_headings(field_type):
     global FIELD_TO_DOCUMENT_HEADINGS_MAP
 
-    file_name = os.path.join(index_dir, f"pre_index_{field_type}.txt")
+    file_name = os.path.join(index_dir, f"preindex_{field_type}")
     with open(file_name, "r") as f:
         data = f.readlines()
         FIELD_TO_DOCUMENT_HEADINGS_MAP[field_type] = [line.strip() for line in data]
@@ -338,8 +338,8 @@ def get_file_num_for_query(field_type, query):
 # File data Queries <<<
 def get_line_from_file(field_type, file_num, query):
 
-    index_file_name = os.path.join(index_dir, f"index_{field_type}_{file_num}.txt")
-    offsets_file_name = os.path.join(index_dir, f"offsets_{field_type}_{file_num}.txt")
+    index_file_name = os.path.join(index_dir, f"index_{field_type}{file_num}.txt")
+    offsets_file_name = os.path.join(index_dir, f"offset_{field_type}{file_num}.txt")
     offsets = None
     with open(offsets_file_name, "r") as f:
         offsets = f.read().split("\n")
@@ -404,7 +404,7 @@ def get_title_file_num(enc_doc_id):
 
 
 def get_line_from_title_file(enc_doc_id, file_num):
-    file_name = os.path.join(index_dir, f"article_titles_{file_num}.txt")
+    file_name = os.path.join(index_dir, f"title{file_num}.txt")
     enc_doc_id = normalize_enc_doc_id(enc_doc_id)
     with open(file_name, "r") as f:
         data = f.read().split("\n")
@@ -422,10 +422,17 @@ def calculate_query_score(token, field_type, scores_map, is_field_query=False):
     file_num = get_file_num_for_query(field_type, token)
     index_file_line = get_line_from_file(field_type, file_num, token)
     token_idf = get_token_idf(token)
-    field_weight = FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY[field_type] if is_field_query else FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY[field_type]
+    field_weight = (
+        FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY[field_type]
+        if is_field_query
+        else FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY[field_type]
+    )
     for document in index_file_line[1:]:
         enc_doc_id, enc_tf = document.split(":")
-        token_tf = base_64_decode(enc_tf)
+        if field_type == FIELD_TYPE_TITLE or field_type == FIELD_TYPE_INFOBOX:
+            token_tf = 1
+        else:
+            token_tf = base_64_decode(enc_tf)
         scores_map[enc_doc_id] += field_weight * token_tf * token_idf
 
 
@@ -511,11 +518,11 @@ if __name__ == "__main__":
     ]:
         get_document_headings(field_type)
 
-    idf_pre_index_file_name = os.path.join(index_dir, f"pre_index_idf.txt")
+    idf_pre_index_file_name = os.path.join(index_dir, f"idf_preindex.txt")
     with open(idf_pre_index_file_name, "r") as f:
         IDF_PRE_INDEX = f.read().split("\n")
 
-    titles_pre_index_file_name = os.path.join(index_dir, "pre_index_titles.txt")
+    titles_pre_index_file_name = os.path.join(index_dir, "title_pre_index.txt")
     with open(titles_pre_index_file_name, "r") as f:
         TITLES_PRE_INDEX = [normalize_enc_doc_id(i) for i in f.read().split("\n")]
 
