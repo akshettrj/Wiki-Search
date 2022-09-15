@@ -381,20 +381,20 @@ FIELD_TYPE_REFERENCES = "r"
 
 # Configuration <<<
 FIELD_TYPE_TO_WEIGHT_MAP_FIELD_QUERY = {
-    FIELD_TYPE_TITLE: 2_500,
-    FIELD_TYPE_BODY: 50,
-    FIELD_TYPE_INFOBOX: 2_100,
-    FIELD_TYPE_CATEGORIES: 2_000,
-    FIELD_TYPE_EXTERNAL_LINKS: 10,
-    FIELD_TYPE_REFERENCES: 25,
+    FIELD_TYPE_TITLE: 55,
+    FIELD_TYPE_BODY: 1.0,
+    FIELD_TYPE_INFOBOX: 20,
+    FIELD_TYPE_CATEGORIES: 15,
+    FIELD_TYPE_EXTERNAL_LINKS: 15,
+    FIELD_TYPE_REFERENCES: 15,
 }
 FIELD_TYPE_TO_WEIGHT_MAP_NORMAL_QUERY = {
-    FIELD_TYPE_TITLE: 2_500,
-    FIELD_TYPE_BODY: 300,
-    FIELD_TYPE_INFOBOX: 2_100,
-    FIELD_TYPE_CATEGORIES: 2_000,
-    FIELD_TYPE_EXTERNAL_LINKS: 1_500,
-    FIELD_TYPE_REFERENCES: 1_500,
+    FIELD_TYPE_TITLE: 45,
+    FIELD_TYPE_BODY: 0.3,
+    FIELD_TYPE_INFOBOX: 10,
+    FIELD_TYPE_CATEGORIES: 0.2,
+    FIELD_TYPE_EXTERNAL_LINKS: 0.1,
+    FIELD_TYPE_REFERENCES: 0.1,
 }
 NUM_RESULTS_PER_QUERY = 10
 # >>>
@@ -514,7 +514,10 @@ def calculate_query_score(token, field_type, scores_map, is_field_query=False):
     )
     for document in index_file_line[1:]:
         enc_doc_id, enc_tf = document.split(":")
-        token_tf = base_64_decode(enc_tf)
+        if field_type == FIELD_TYPE_TITLE or field_type == FIELD_TYPE_INFOBOX:
+            token_tf = 1
+        else:
+            token_tf = base_64_decode(enc_tf)
         scores_map[enc_doc_id] += field_weight * token_tf * token_idf
 
 
