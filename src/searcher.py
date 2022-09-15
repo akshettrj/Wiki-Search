@@ -470,7 +470,7 @@ def get_search_results(search_string: str):
     priority_queue = [(-v, k) for k, v in scores_map.items()]
     heapq.heapify(priority_queue)
 
-    for _ in range(NUM_RESULTS_PER_QUERY):
+    while len(results) < NUM_RESULTS_PER_QUERY:
         if len(priority_queue) == 0:
             break
         top_element = heapq.heappop(priority_queue)
@@ -479,6 +479,8 @@ def get_search_results(search_string: str):
         title_file_num = get_title_file_num(enc_doc_id)
         line_from_title_file = get_line_from_title_file(enc_doc_id, title_file_num)
         doc_title = line_from_title_file.split(maxsplit=1)[1]
+        if any(doc_title.startswith(meta) for meta in ["Help:", "Module:"]):
+            continue
         results.append(f"{enc_doc_id}, {doc_title}")
 
     return results

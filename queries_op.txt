@@ -8,7 +8,7 @@ rLlY, Billie Eilish
 68jI, List of The Grim Adventures of Billy & Mandy episodes
 Iksd, Health and appearance of Michael Jackson
 F!Qm, Jackson (name)
-1.5606373800001165
+1.3400623319994338
 
 2kop, Supergirl (Kara Zor-El)
 5ZX+, Blue Beetle (Jaime Reyes)
@@ -20,7 +20,7 @@ KJQM, Phil Spector
 18Lo, Showcase (comics)
 +FnQ, Blue Beetle
 OQlz, Green Lantern (comic book)
-0.8002252070000395
+0.36756826600048953
 
 sLb4, Cuneiform Records discography
 0J93, Allan Pettersson
@@ -32,7 +32,7 @@ HxbU, Pettersson
 +qRU, Runes
 0bL!, Rune (video game)
 XtyE, Category:Compositions by Allan Pettersson
-0.3006397379995178
+0.19479884100019262
 
 kAcR, James Heappey
 vqNW, Racism in the UK Conservative Party
@@ -44,7 +44,7 @@ e51F, List of songs recorded by AC/DC
 iohr, SmartTrack
 zvcB, Opinion polling for the 2021 Canadian federal election
 6gsH, Production history of the Oregon Shakespeare Festival
-0.3159591020003063
+0.1915313680001418
 
 +Fkm, USS Conolly
 6Jfw, William Conolly
@@ -56,7 +56,7 @@ kaRw, Patrick Conolly
 jEbP, Ann Conolly
 UsSp, Arthur Conolly
 2MA4, Lady Louisa Conolly
-0.2802962430005209
+0.08960907999971823
 
 hdnw, Speed limits in the United States by jurisdiction
 +6Aio, Light in painting
@@ -68,7 +68,7 @@ DU8H, Netherlands at the Olympics
 39ba, Emergency vehicle lighting
 2XU, Speed of light
 1C9j, Sheffield Shield
-0.6540231970002424
+0.6771658249999746
 
 +483G, List of fungi of South Africa – P
 XYA9, List of ships captured in the 18th century
@@ -80,7 +80,7 @@ JHyz, New Zealand at the 1950 British Empire Games
 XXgh, List of ships captured in the 19th century
 uWwH, List of teams and cyclists in the 1950 Giro d'Italia
 lCTQ, Results of the 1950 New South Wales state election
-0.9254948919997332
+0.6098033159996703
 
 In9f, Tarantula
 1phH, List of most massive stars
@@ -92,17 +92,17 @@ Kfm5, Tom Birdseye
 +6Gz9, Birdseye, Tom
 +iPj, Birdseye, IN
 0cFz, Clarence Birdseye
-0.09328174800066336
+0.1006958490006582
 
-+0gHT, Module:Language/data/ISO 639 name to code/sandbox
-w8SC, Module:Language/data/ISO 639 name to code
 +6z4Z, Draft:List of other district roads in Tamil Nadu
-aHTt, Help:Citation Style 1/mass test/fcite web
-aN3A, Help:Citation Style 1/mass test/fcite web ref
 5OLe, List of United States representatives from Pennsylvania
 dgbb, Paracompact uniform honeycombs
 lWsS, Opinion polling for the 2018 Italian general election
-aHTY, Help:Citation Style 1/mass test/cite web
-aM7T, Help:Citation Style 1/mass test/cite web ref
-4.943992344000435
+tC7T, Opinion polling for the 2022 Italian general election
++0!tU, Responses to the COVID-19 pandemic in July 2020
+zpWi, Results of the 2018 Swedish general election
+3TFY, List of countries by suicide rate
+tKMf, Opinion polling for the 2021 Norwegian parliamentary election
++!W6z, Results of the 2014 Swedish general election
+5.593394014000296
 
