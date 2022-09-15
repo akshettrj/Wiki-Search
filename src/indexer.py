@@ -460,7 +460,8 @@ def merge_temp_idf_files():
             current_frequency += frequencies[new_file_num]
         else:
             buffer_token_count += 1
-            freq = handle_frequency(TOTAL_ARTICLE_COUNT / current_frequency, 6)
+            # freq = handle_frequency(TOTAL_ARTICLE_COUNT / current_frequency, 6)
+            freq = TOTAL_ARTICLE_COUNT / current_frequency
             data.append(f"{current_word} {freq}")
             current_word = top_element[0]
             current_frequency = frequencies[new_file_num]
@@ -476,7 +477,8 @@ def merge_temp_idf_files():
             frequencies[new_file_num] = int(top_line[1])
             heapq.heappush(priority_queue, (top_line[0], new_file_num))
 
-    freq = handle_frequency(TOTAL_ARTICLE_COUNT / current_frequency, 6)
+    # freq = handle_frequency(TOTAL_ARTICLE_COUNT / current_frequency, 6)
+    freq = TOTAL_ARTICLE_COUNT / current_frequency
     data.append(f"{current_word} {freq}")
     write_final_idf_files(data, page_count)
 
